@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Весёлый Платформер</title>
+    <style>
+        /* Сбрасываем отступы и запрещаем выделение текста */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Основной контейнер на весь экран */
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+            font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif;
+            touch-action: none; /* Отключаем стандартные жесты браузера */
+        }
+
+        /* Игровой холст */
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, #87CEEB 0%, #B0E0E6 70%, #98D8C8 100%);
+        }
+
+        /* Панель управления внизу экрана */
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Группа кнопок движения */
+        .move-buttons {
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        /* Группа кнопки прыжка */
+        .jump-button {
+            pointer-events: auto;
+        }
+
+        /* Стили кнопок управления */
+        .control-btn {
+            width: 80px;
+            height: 80px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            font-size: 32px;
+            font-weight: bold;
+            color: #4A90E2;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-btn:active {
+            transform: scale(0.92);
+            background: rgba(255, 255, 255, 1);
+        }
+
+        .jump-btn {
+            background: rgba(255, 200, 100, 0.9);
+            color: #D2691E;
+        }
+
+        /* Панель информации сверху */
+        #info {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #coinCounter {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #D2691E;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        #instruction {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 16px;
+            color: #4A90E2;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Модальное окно для сообщений */
+        #messageOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        #messageOverlay.active {
+            display: flex;
+        }
+
+        #messageBox {
+            background: white;
+            padding: 40px;
+            border-radius: 25px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 90%;
+        }
+
+        #messageText {
+            font-size: 28px;
+            font-weight: bold;
+            color: #4A90E2;
+            margin-bottom: 25px;
+        }
+
+        #restartBtn {
+            padding: 15px 40px;
+            font-size: 22px;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(135deg, #4A90E2, #50C878);
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.4);
+            transition: transform 0.1s;
+        }
+
+        #restartBtn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <!-- Игровой холст -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Панель информации -->
+    <div id="info">
+        <div id="coinCounter">🪙 0 / 10</div>
+        <div id="instruction">Собери все монеты и дойди до флага!</div>
+    </div>
+
+    <!-- Панель управления -->
+    <div id="controls">
+        <div class="move-buttons">
+            <button class="control-btn" id="leftBtn">◀</button>
+            <button class="control-btn" id="rightBtn">▶</button>
+        </div>
+        <div class="jump-button">
+            <button class="control-btn jump-btn" id="jumpBtn">⬆</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно сообщений -->
+    <div id="messageOverlay">
+        <div id="messageBox">
+            <div id="messageText"></div>
+            <button id="restartBtn">Играть снова</button>
+        </div>
+    </div>
+
+    <script>
+        // ===== ИНИЦИАЛИЗАЦИЯ CANVAS =====
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Адаптируем размер canvas под экран
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // ===== ИГРОВЫЕ КОНСТАНТЫ =====
+        const GRAVITY = 1500;           // Сила гравитации (пикселей/сек²)
+        const JUMP_POWER = -600;        // Сила прыжка
+        const MOVE_SPEED = 250;         // Скорость движения (пикселей/сек)
+        const PLAYER_SIZE = 40;         // Размер игрока
+        const COIN_RADIUS = 15;         // Радиус монеты
+
+        // ===== СОСТОЯНИЕ ИГРЫ =====
+        let gameState = 'playing';      // 'playing', 'won', 'lost'
+        let coinsCollected = 0;
+        let totalCoins = 10;
+        let lastTime = 0;
+
+        // ===== ИГРОК =====
+        const player = {
+            x: 100,
+            y: 300,
+            vx: 0,
+            vy: 0,
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            onGround: false,
+            facingRight: true
+        };
+
+        // ===== КАМЕРА =====
+        const camera = {
+            x: 0,
+            y: 0
+        };
+
+        // ===== УРОВЕНЬ: ПЛАТФОРМЫ =====
+        // Создаём длинный уровень с 18 платформами
+        const platforms = [
+            // Стартовая платформа
+            { x: 0, y: 500, width: 300, height: 30 },
+            // Платформы для прыжков
+            { x: 350, y: 450, width: 150, height: 30 },
+            { x: 550, y: 400, width: 150, height: 30 },
+            { x: 750, y: 350, width: 200, height: 30 },
+            { x: 1000, y: 400, width: 150, height: 30 },
+            { x: 1200, y: 450, width: 180, height: 30 },
+            { x: 1450, y: 400, width: 150, height: 30 },
+            { x: 1650, y: 350, width: 200, height: 30 },
+            { x: 1900, y: 300, width: 150, height: 30 },
+            { x: 2100, y: 350, width: 180, height: 30 },
+            { x: 2350, y: 400, width: 150, height: 30 },
+            { x: 2550, y: 450, width: 200, height: 30 },
+            { x: 2800, y: 400, width: 150, height: 30 },
+            { x: 3000, y: 350, width: 180, height: 30 },
+            { x: 3250, y: 300, width: 150, height: 30 },
+            { x: 3450, y: 350, width: 200, height: 30 },
+            { x: 3700, y: 400, width: 150, height: 30 },
+            // Финишная платформа
+            { x: 3900, y: 450, width: 250, height: 30 }
+        ];
+
+        // ===== МОНЕТЫ =====
+        // Размещаем 10 монет по уровню
+        const coins = [
+            { x: 400, y: 400, collected: false },
+            { x: 600, y: 350, collected: false },
+            { x: 850, y: 300, collected: false },
+            { x: 1050, y: 350, collected: false },
+            { x: 1300, y: 400, collected: false },
+            { x: 1500, y: 350, collected: false },
+            { x: 1750, y: 300, collected: false },
+            { x: 2000, y: 250, collected: false },
+            { x: 2200, y: 300, collected: false },
+            { x: 2650, y: 400, collected: false }
+        ];
+
+        // ===== ШИПЫ =====
+        // Размещаем шипы на некоторых платформах
+        const spikes = [
+            { x: 800, y: 320, width: 60, height: 30 },
+            { x: 1700, y: 320, width: 80, height: 30 },
+            { x: 2600, y: 420, width: 70, height: 30 }
+        ];
+
+        // ===== ФИНИШ (ФЛАГ) =====
+        const finish = {
+            x: 4050,
+            y: 350,
+            width: 50,
+            height: 100
+        };
+
+        // ===== УПРАВЛЕНИЕ =====
+        const keys = {
+            left: false,
+            right: false,
+            jump: false
+        };
+
+        // Обработка клавиатуры
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A' || e.key === 'ф' || e.key === 'Ф') {
+                keys.left = true;
+            }
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D' || e.key === 'в' || e.key === 'В') {
+                keys.right = true;
+            }
+            if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === 'ц' || e.key === 'Ц') {
+                keys.jump = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A' || e.key === 'ф' || e.key === 'Ф') {
+                keys.left = false;
+            }
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D' || e.key === 'в' || e.key === 'В') {
+                keys.right = false;
+            }
+            if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === 'ц' || e.key === 'Ц') {
+                keys.jump = false;
+            }
+        });
+
+        // Обработка кнопок управления
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        const jumpBtn = document.getElementById('jumpBtn');
+
+        // Функция для предотвращения скролла
+        function preventScroll(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Кнопка "Влево"
+        leftBtn.addEventListener('touchstart', (e) => {
+            preventScroll(e);
+            keys.left = true;
+        });
+        leftBtn.addEventListener('touchend', (e) => {
+            preventScroll(e);
+            keys.left = false;
+        });
+        leftBtn.addEventListener('mousedown', () => keys.left = true);
+        leftBtn.addEventListener('mouseup', () => keys.left = false);
+        leftBtn.addEventListener('mouseleave', () => keys.left = false);
+
+        // Кнопка "Вправо"
+        rightBtn.addEventListener('touchstart', (e) => {
+            preventScroll(e);
+            keys.right = true;
+        });
+        rightBtn.addEventListener('touchend', (e) => {
+            preventScroll(e);
+            keys.right = false;
+        });
+        rightBtn.addEventListener('mousedown', () => keys.right = true);
+        rightBtn.addEventListener('mouseup', () => keys.right = false);
+        rightBtn.addEventListener('mouseleave', () => keys.right = false);
+
+        // Кнопка "Прыжок"
+        jumpBtn.addEventListener('touchstart', (e) => {
+            preventScroll(e);
+            keys.jump = true;
+        });
+        jumpBtn.addEventListener('touchend', (e) => {
+            preventScroll(e);
+            keys.jump = false;
+        });
+        jumpBtn.addEventListener('mousedown', () => keys.jump = true);
+        jumpBtn.addEventListener('mouseup', () => keys.jump = false);
+        jumpBtn.addEventListener('mouseleave', () => keys.jump = false);
+
+        // ===== ФИЗИКА И ОБНОВЛЕНИЕ =====
+        function update(deltaTime) {
+            if (gameState !== 'playing') return;
+
+            // Горизонтальное движение
+            player.vx = 0;
+            if (keys.left) {
+                player.vx = -MOVE_SPEED;
+                player.facingRight = false;
+            }
+            if (keys.right) {
+                player.vx = MOVE_SPEED;
+                player.facingRight = true;
+            }
+
+            // Прыжок (только если на земле)
+            if (keys.jump && player.onGround) {
+                player.vy = JUMP_POWER;
+                player.onGround = false;
+            }
+
+            // Применяем гравитацию
+            player.vy += GRAVITY * deltaTime;
+
+            // Обновляем позицию
+            player.x += player.vx * deltaTime;
+            player.y += player.vy * deltaTime;
+
+            // Проверяем столкновения с платформами
+            player.onGround = false;
+            for (let plat of platforms) {
+                if (checkCollision(player, plat)) {
+                    // Определяем сторону столкновения
+                    const overlapX = Math.min(player.x + player.width - plat.x, plat.x + plat.width - player.x);
+                    const overlapY = Math.min(player.y + player.height - plat.y, plat.y + plat.height - player.y);
+
+                    if (overlapY < overlapX) {
+                        // Столкновение сверху или снизу
+                        if (player.vy > 0 && player.y + player.height - player.vy * deltaTime <= plat.y + 5) {
+                            // Приземление на платформу
+                            player.y = plat.y - player.height;
+                            player.vy = 0;
+                            player.onGround = true;
+                        } else if (player.vy < 0) {
+                            // Удар головой о платформу
+                            player.y = plat.y + plat.height;
+                            player.vy = 0;
+                        }
+                    } else {
+                        // Столкновение сбоку
+                        if (player.vx > 0) {
+                            player.x = plat.x - player.width;
+                        } else if (player.vx < 0) {
+                            player.x = plat.x + plat.width;
+                        }
+                    }
+                }
+            }
+
+            // Проверяем сбор монет
+            for (let coin of coins) {
+                if (!coin.collected && checkCircleCollision(player, coin.x, coin.y, COIN_RADIUS)) {
+                    coin.collected = true;
+                    coinsCollected++;
+                    updateCoinCounter();
+                }
+            }
+
+            // Проверяем столкновение с шипами
+            for (let spike of spikes) {
+                if (checkCollision(player, spike)) {
+                    gameOver();
+                    return;
+                }
+            }
+
+            // Проверяем достижение финиша
+            if (checkCollision(player, finish)) {
+                if (coinsCollected === totalCoins) {
+                    gameWon();
+                }
+            }
+
+            // Проверяем падение в пропасть
+            if (player.y > canvas.height + 100) {
+                gameOver();
+                return;
+            }
+
+            // Обновляем камеру (следует за игроком)
+            camera.x = player.x - canvas.width / 2 + player.width / 2;
+            camera.y = player.y - canvas.height / 2 + player.height / 2;
+
+            // Ограничиваем камеру
+            if (camera.x < 0) camera.x = 0;
+            if (camera.y < 0) camera.y = 0;
+        }
+
+        // ===== ПРОВЕРКА СТОЛКНОВЕНИЙ =====
+        // Столкновение двух прямоугольников (AABB)
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // Столкновение прямоугольника и круга
+        function checkCircleCollision(rect, cx, cy, radius) {
+            const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.width));
+            const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.height));
+            const distanceX = cx - closestX;
+            const distanceY = cy - closestY;
+            const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+            return distanceSquared < radius * radius;
+        }
+
+        // ===== ОТРИСОВКА =====
+        function draw() {
+            // Очищаем canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Сохраняем состояние и применяем камеру
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // Рисуем платформы
+            ctx.fillStyle = '#8B4513';
+            for (let plat of platforms) {
+                ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+                // Рисуем траву сверху
+                ctx.fillStyle = '#228B22';
+                ctx.fillRect(plat.x, plat.y, plat.width, 8);
+                ctx.fillStyle = '#8B4513';
+            }
+
+            // Рисуем монеты
+            for (let coin of coins) {
+                if (!coin.collected) {
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(coin.x, coin.y, COIN_RADIUS, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#FFA500';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            }
+
+            // Рисуем шипы
+            ctx.fillStyle = '#808080';
+            for (let spike of spikes) {
+                // Рисуем треугольные шипы
+                const spikeCount = Math.floor(spike.width / 20);
+                for (let i = 0; i < spikeCount; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(spike.x + i * 20, spike.y + spike.height);
+                    ctx.lineTo(spike.x + i * 20 + 10, spike.y);
+                    ctx.lineTo(spike.x + i * 20 + 20, spike.y + spike.height);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+
+            // Рисуем финиш (флаг)
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(finish.x, finish.y, 8, finish.height);
+            ctx.fillStyle = '#32CD32';
+            ctx.beginPath();
+            ctx.moveTo(finish.x + 8, finish.y);
+            ctx.lineTo(finish.x + 50, finish.y + 20);
+            ctx.lineTo(finish.x + 8, finish.y + 40);
+            ctx.closePath();
+            ctx.fill();
+
+            // Рисуем игрока
+            ctx.fillStyle = '#FF6B6B';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Рисуем глаза
+            ctx.fillStyle = 'white';
+            const eyeOffsetX = player.facingRight ? 10 : 5;
+            ctx.beginPath();
+            ctx.arc(player.x + eyeOffsetX, player.y + 15, 6, 0, Math.PI * 2);
+            ctx.arc(player.x + eyeOffsetX + 15, player.y + 15, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Зрачки
+            ctx.fillStyle = 'black';
+            const pupilOffset = player.facingRight ? 2 : -2;
+            ctx.beginPath();
+            ctx.arc(player.x + eyeOffsetX + pupilOffset, player.y + 15, 3, 0, Math.PI * 2);
+            ctx.arc(player.x + eyeOffsetX + 15 + pupilOffset, player.y + 15, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Восстанавливаем состояние
+            ctx.restore();
+        }
+
+        // ===== ИГРОВОЙ ЦИКЛ =====
+        function gameLoop(currentTime) {
+            // Вычисляем delta time в секундах
+            const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
+            lastTime = currentTime;
+
+            update(deltaTime);
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ===== ОБНОВЛЕНИЕ СЧЁТЧИКА МОНЕТ =====
+        function updateCoinCounter() {
+            document.getElementById('coinCounter').textContent = `🪙 ${coinsCollected} / ${totalCoins}`;
+        }
+
+        // ===== КОНЕЦ ИГРЫ =====
+        function gameOver() {
+            gameState = 'lost';
+            document.getElementById('messageText').textContent = 'Упс! Попробуй снова';
+            document.getElementById('messageOverlay').classList.add('active');
+        }
+
+        // ===== ПОБЕДА =====
+        function gameWon() {
+            gameState = 'won';
+            document.getElementById('messageText').textContent = 'Уровень пройден!';
+            document.getElementById('messageOverlay').classList.add('active');
+        }
+
+        // ===== ПЕРЕЗАПУСК ИГРЫ =====
+        function restartGame() {
+            // Сбрасываем состояние
+            gameState = 'playing';
+            coinsCollected = 0;
+            
+            // Сбрасываем позицию игрока
+            player.x = 100;
+            player.y = 300;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            
+            // Сбрасываем монеты
+            for (let coin of coins) {
+                coin.collected = false;
+            }
+            
+            // Обновляем счётчик
+            updateCoinCounter();
+            
+            // Скрываем сообщение
+            document.getElementById('messageOverlay').classList.remove('active');
+        }
+
+        // Обработчик кнопки перезапуска
+        document.getElementById('restartBtn').addEventListener('click', restartGame);
+
+        // ===== ЗАПУСК ИГРЫ =====
+        updateCoinCounter();
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
